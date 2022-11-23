@@ -4,7 +4,7 @@
 #
 #
 
-list.of.packages <- c('shiny', 'shinydashboard', 'foreach', 'dplyr', 'reshape2', 'ggplot2', 'equatiomatic', 'zeallot', 'plotly', 'scales', 'xlsx2dfs', 'shinybusy', 'tibble', 'readr', 'hydroGOF', 'stringr', 'BiocManager')
+list.of.packages <- c('shiny', 'shinydashboard', 'foreach', 'dplyr', 'reshape2', 'ggplot2', 'equatiomatic', 'zeallot', 'plotly', 'scales', 'xlsx2dfs', 'shinybusy', 'tibble', 'readr', 'hydroGOF', 'stringr', 'BiocManager', 'UpSetR')
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -36,6 +36,7 @@ library(hydroGOF)
 library(stringr)
 library(WaveICA2.0)
 library(sva)
+library(UpSetR)
 
 options(shiny.maxRequestSize=50000*1024^2)
 memory.limit(size = NA)
@@ -374,19 +375,22 @@ ui <- dashboardPage(
             ),
             ### Feature Alignemnt Tab
             tabItem(tabName = "Alignment",
-                    fluidRow(box(width = 6,
+                    fluidRow(box(width = 4, height = 300,
                                  title = h3("Align Features Across the Batches"),
                                  div(style="display: inline-block;",textInput("RTShift", "Retention Time Deviation (ex. 0.2)", value = "", placeholder = "0.2")),
                                  div(style="display: inline-block; width: 100px;",HTML("<br>")),
                                  div(style="display: inline-block;",textInput("ppmError", "ppm Error (ex. 10)", value = "", placeholder = "10")),
                                  div(style="display: inline-block; width: 100px;",HTML("<br>")),
                                  br(),
-                                 br(),
                                  actionButton("AlignFeatures", "Align Features", style="color: #fff; background-color: #449e48;border-color: #000000"),
                                  downloadButton('download_all_alignedfeatures', label = "Download Aligned Features"),
                                  add_busy_spinner(spin = "fading-circle")
                     ),
-                    box(width = 6,
+                    box(width = 3, height = 300,
+                        title = h3("Summary of Aligned Features:"),
+                        column(width = 12, tableOutput("alignedFeatures_summary"), style="height:170px; overflow-y:scroll;")
+                    ),
+                    box(width = 5, height = 300,
                         title = h3("Allow Missing Data:"),
                         div(style="display: inline-block;",textInput("numMissing", "In how many batches can a feature be missing?", value = "", placeholder = "2")),
                         br(),
@@ -395,11 +399,10 @@ ui <- dashboardPage(
                         downloadButton('download_subset_alignedfeatures_data', label = "Download Data of Selected of Aligned Features"),
                         add_busy_spinner(spin = "fading-circle")
                     )),
-                    box(width = 3, height = 600,
-                        title = h3("Summary of Aligned Features:"),
-                        tableOutput("alignedFeatures_summary")
-                    ),
-                    box(width = 9, height = 600,
+                    box(width = 5, height = 600,
+                        title = h3("UpSet Plot Showing Distrubution of Missingness:"),
+                        plotOutput("UpSet_Plot")),
+                    box(width = 7, height = 600,
                         title = h3("RT Deviation of Aligned Features:"),
                         plotlyOutput("Feaures_RT_deviation_Plot")
                     )
@@ -692,8 +695,6 @@ server <- function(input, output, session) {
     alignedFeatures <- reactiveValues( all_aligned_features = NULL, aligned_features_subset = NULL, interested_features_dataframe = NULL, nomissingdata = NULL)
     
     observeEvent(input$AlignFeatures, {
-        
-        start_time <- Sys.time()
         show_modal_progress_line(text = "Matching Batch 1")
         
         allBatches_mzRTinfo <- allBatches_mzRTinfo()
@@ -759,9 +760,7 @@ server <- function(input, output, session) {
             
             output$alignedFeatures_summary <- renderTable(summary_info)
             
-            end_time <- Sys.time()
-
-            howlong <<- end_time - start_time
+            output$UpSet_Plot <- renderPlot({upset(as.data.frame(ifelse(is.na(aligned_features_info[,grepl( "mz" , names(aligned_features_info))]),0,1)), sets = colnames(aligned_features_info)[grepl( "mz" , names(aligned_features_info))], order.by = "degree", keep.order = "TRUE")}) 
             
             remove_modal_spinner()
 
